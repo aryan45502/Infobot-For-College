@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #ffffff;
+            background-image: url('{{ url_for('static', filename='1323732e-bd58-476f-8efb-da5df779f44a.png') }}');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+        }
+        .gif-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+        .gif-background iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .background-robot-gif {
+            position: absolute;
+            bottom: 200px; /* Raise it above the center */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px; /* Adjust size as needed */
+            height: 150px; /* Adjust size as needed */
+            display: none; /* Initially hidden */
+            z-index: 2;
+        }
+        .top-center-image {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: 200px; /* Adjust the size as needed */
+            z-index: 3;
+        }
+        .robot {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 557px;
+            height: 550px;
+            z-index: 4;
+        }
+        .robot img {
+            width: 100%;
+            height: 100%;
+        }
+        .response {
+            position: absolute;
+            top: 100px; /* Adjust based on the height of the top image */
+            width: 100%;
+            text-align: center;
+            font-size: 1.2em;
+            color: #333;
+            z-index: 3;
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="container">
+        <img src="{{ url_for('static', filename='robotbody/VZvw.gif') }}" class="background-robot-gif" id="background-robot-gif" alt="Background Robot">
+        <div class="robot initial" id="robot-container">
+            <img src="{{ url_for('static', filename='robotbody/speaking-robot-unscreen.gif') }}" alt="Robot">
+        </div>
+        <div class="response" id="response"></div>
+    </div>
+    <script>
+        function changeState(state) {
+            const robot = document.querySelector('.robot');
+            robot.className = 'robot ' + state;
+        }
+
+        document.addEventListener('click', () => {
+            const backgroundRobotGif = document.getElementById('background-robot-gif');
+            backgroundRobotGif.style.display = 'block'; // Show the background GIF on click
+
+            const robot = document.querySelector('.robot');
+            changeState('listening'); // Change to listening on click
+            document.getElementById('response').innerText = ""; // Clear previous response
+
+            // Initiate face recognition request with an empty JSON object
+            fetch('/recognize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({}) // Ensure body is not empty
+            })
+            .then(response => {
+                if (!response.ok) {
+                    changeState('error');
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('response').innerText = "Error: " + data.error;
+                    changeState('error');
+                } else {
+                    document.getElementById('response').innerText = data.text;
+                    changeState('still'); // Change to still after recognizing text
+
+                    // Initiate text generation request
+                    return fetch('/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ text: data.text })
+                    });
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    changeState('error');
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('response').innerText = "Error: " + data.error;
+                    changeState('error');
+                } else {
+                    const generatedText = data.response;
+                    document.getElementById('response').innerText = generatedText;
+
+                    // Calculate speaking duration
+                    const duration = Math.max(generatedText.length * 100, 3000);
+
+                    // Change robot state to speaking
+                    changeState('speaking');
+
+                    // Set timeout for returning to still state
+                    setTimeout(() => {
+                        changeState('still');
+                    }, duration);
+
+                    // Initiate text-to-speech request
+                    return fetch('/speak', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ text: generatedText })
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('response').innerText = "Error: " + error.message;
+                changeState('error');
+            });
+        });
+    </script>
+</body>
+</html>
